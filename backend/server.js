@@ -25,7 +25,7 @@ app.use(
   })
 )
 
-app.use(express.json({ limit: '2mb' }))
+app.use(express.json({ limit: '3mb' }))
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
 const MONGODB_URI = process.env.MONGODB_URI || ''
