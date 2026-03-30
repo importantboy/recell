@@ -1,0 +1,31 @@
+[
+  {
+    "id": "order_1774887763364_b0a8b2daecfd6",
+    "createdAt": "2026-03-30T16:22:43.364Z",
+    "items": [
+      {
+        "id": 3,
+        "name": "iPhone 12",
+        "price": 25000,
+        "qty": 1,
+        "storage": "64GB",
+        "img": "https://images.unsplash.com/photo-1605236453806-6ff36851218e?auto=format&fit=crop&q=80&w=400",
+        "condition": "Fair"
+      }
+    ],
+    "totals": {
+      "subtotal": 25000,
+      "tax": 4500,
+      "total": 29500
+    },
+    "shipping": {
+      "fullName": "Rahul kumar",
+      "address1": "1232",
+      "city": "bakhtiyarpur",
+      "pinCode": "232312",
+      "phone": "9341164705"
+    },
+    "paymentMethod": "upi",
+    "status": "placed"
+  }
+]
