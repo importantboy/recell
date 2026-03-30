@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const CART_KEY = 'web-app-0da18758-cart'
+const AUTH_KEY = 'recell-auth'
 
 const productsSeed = [
   {
@@ -90,6 +91,15 @@ export default function App() {
   const [toast, setToast] = useState({ open: false, message: 'Item added to cart' })
   const toastTimerRef = useRef(null)
 
+  const [auth, setAuth] = useState(() => {
+    try {
+      const raw = localStorage.getItem(AUTH_KEY)
+      return raw ? JSON.parse(raw) : { token: null, user: null }
+    } catch {
+      return { token: null, user: null }
+    }
+  })
+
   const [products, setProducts] = useState(productsSeed)
   const [cart, setCart] = useState(() => {
     try {
@@ -119,10 +129,20 @@ export default function App() {
 
   const [successModal, setSuccessModal] = useState({ open: false, title: '', message: '' })
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
+
+  const [trackLoading, setTrackLoading] = useState(false)
+  const [myOrders, setMyOrders] = useState([])
+  const [myPickups, setMyPickups] = useState([])
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart))
   }, [cart])
+
+  useEffect(() => {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(auth))
+  }, [auth])
 
   useEffect(() => {
     let ignore = false
@@ -165,6 +185,35 @@ export default function App() {
     setMobileMenuOpen(false)
     setSection(next)
     window.scrollTo(0, 0)
+  }
+
+  const authedFetch = async (url, init = {}) => {
+    const headers = new Headers(init.headers || {})
+    if (auth?.token) headers.set('authorization', `Bearer ${auth.token}`)
+    return fetch(url, { ...init, headers })
+  }
+
+  const refreshTracking = async () => {
+    if (!auth?.token) return
+    setTrackLoading(true)
+    try {
+      const [oRes, pRes] = await Promise.all([
+        authedFetch(`${apiBase}/api/track/orders`),
+        authedFetch(`${apiBase}/api/track/pickups`),
+      ])
+      const o = oRes.ok ? await oRes.json() : { orders: [] }
+      const p = pRes.ok ? await pRes.json() : { pickups: [] }
+      setMyOrders(Array.isArray(o.orders) ? o.orders : [])
+      setMyPickups(Array.isArray(p.pickups) ? p.pickups : [])
+    } finally {
+      setTrackLoading(false)
+    }
+  }
+
+  const logout = () => {
+    setAuth({ token: null, user: null })
+    setToast({ open: true, message: 'Logged out' })
+    navigate('home')
   }
 
   const addToCart = (productId) => {
@@ -253,6 +302,7 @@ export default function App() {
           condition: sellCondition,
           storageGb: Number(sellStorage),
           accessories: { box: accBox, charger: accCharger, bill: accBill },
+          userId: auth?.user?.id || null,
         }),
       })
     } catch {
@@ -289,6 +339,7 @@ export default function App() {
           cartItems: cart.map((i) => ({ id: i.id, qty: i.qty })),
           shipping,
           paymentMethod,
+          userId: auth?.user?.id || null,
         }),
       })
       if (!res.ok) throw new Error('Checkout failed')
@@ -335,6 +386,29 @@ export default function App() {
               <button onClick={() => navigate('sell')} className="text-brand-500 font-semibold hover:text-brand-600 transition-colors">
                 Sell Phone
               </button>
+              <button onClick={() => navigate('track')} className="text-slate-600 hover:text-brand-500 font-medium transition-colors">
+                Track
+              </button>
+
+              {auth?.token ? (
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-semibold text-slate-600">
+                    Hi{auth.user?.name ? `, ${auth.user.name}` : ''}!
+                  </div>
+                  <button onClick={logout} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition-colors">
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => navigate('login')} className="px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:border-brand-400 hover:text-brand-600 transition-colors">
+                    Login
+                  </button>
+                  <button onClick={() => navigate('signup')} className="px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">
+                    Sign up
+                  </button>
+                </div>
+              )}
 
               <button onClick={() => navigate('cart')} className="relative p-2 text-slate-600 hover:text-brand-500 transition-colors group" aria-label="Cart">
                 <i className="fa-solid fa-cart-shopping text-xl group-hover:scale-110 transition-transform"></i>
@@ -379,6 +453,23 @@ export default function App() {
             <button onClick={() => navigate('sell')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-brand-500 hover:bg-brand-50">
               Sell Phone
             </button>
+            <button onClick={() => navigate('track')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-brand-500 hover:bg-slate-50">
+              Track
+            </button>
+            {auth?.token ? (
+              <button onClick={logout} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-red-600 hover:bg-slate-50">
+                Logout
+              </button>
+            ) : (
+              <div className="pt-2 grid grid-cols-2 gap-2">
+                <button onClick={() => navigate('login')} className="px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:border-brand-400 hover:text-brand-600 transition-colors">
+                  Login
+                </button>
+                <button onClick={() => navigate('signup')} className="px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">
+                  Sign up
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -387,79 +478,283 @@ export default function App() {
       <main className="flex-grow pt-16">
         {/* HOME */}
         {section === 'home' ? (
-          <section className="min-h-[calc(100vh-4rem)] flex flex-col justify-center relative overflow-hidden">
-            <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand-100 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse"></div>
-            <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-accent-100 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-pulse" style={{ animationDelay: '2s' }}></div>
+          <section className="relative overflow-hidden">
+            {/* Background */}
+            <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50 to-white"></div>
+            <div className="absolute -top-24 -left-24 w-[28rem] h-[28rem] bg-brand-100 rounded-full blur-3xl opacity-70"></div>
+            <div className="absolute -bottom-24 -right-24 w-[28rem] h-[28rem] bg-accent-100 rounded-full blur-3xl opacity-70"></div>
+            <div className="absolute top-24 right-1/3 w-72 h-72 bg-brand-50 rounded-full blur-3xl opacity-80"></div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div className="text-center lg:text-left animate-slide-up">
-                  <span className="inline-block py-1 px-3 rounded-full bg-brand-100 text-brand-600 text-sm font-semibold mb-4">
-                    India's #1 Trusted Marketplace
-                  </span>
-                  <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 leading-tight mb-6">
-                    Upgrade Smart.
-                    <br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-accent-500">
-                      Sell Easy.
-                    </span>
-                  </h1>
-                  <p className="text-lg text-slate-600 mb-8 max-w-xl mx-auto lg:mx-0">
-                    Get the best price for your old phone instantly, or buy certified refurbished smartphones at
-                    unbeatable prices.
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                    <button onClick={() => navigate('sell')} className="px-8 py-4 bg-brand-500 text-white rounded-xl font-bold text-lg hover:bg-brand-600 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex items-center justify-center">
-                      <i className="fa-solid fa-tags mr-2"></i> Sell Your Phone
-                    </button>
-                    <button onClick={() => navigate('shop')} className="px-8 py-4 bg-white text-slate-800 border-2 border-slate-200 rounded-xl font-bold text-lg hover:border-brand-500 hover:text-brand-500 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex items-center justify-center">
-                      <i className="fa-solid fa-bag-shopping mr-2"></i> Shop Now
-                    </button>
-                  </div>
-                  <div className="mt-10 flex items-center justify-center lg:justify-start space-x-6 text-sm text-slate-500 font-medium">
-                    <div className="flex items-center">
-                      <i className="fa-solid fa-truck-fast text-brand-500 mr-2"></i> Free Pickup
+            <div className="relative z-10">
+              {/* Hero */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-12">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+                  <div className="animate-slide-up">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-slate-200 text-sm font-semibold text-slate-700 shadow-sm">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-500 text-white">
+                        <i className="fa-solid fa-bolt text-xs"></i>
+                      </span>
+                      Instant quotes, verified buyers, secure payouts
                     </div>
-                    <div className="flex items-center">
-                      <i className="fa-solid fa-money-bill-wave text-brand-500 mr-2"></i> Instant Cash
-                    </div>
-                    <div className="flex items-center">
-                      <i className="fa-solid fa-shield-halved text-brand-500 mr-2"></i> Secure
-                    </div>
-                  </div>
-                </div>
 
-                <div className="hidden lg:block relative animate-fade-in">
-                  <div className="relative w-full max-w-lg mx-auto">
-                    <div className="absolute inset-0 bg-gradient-to-tr from-brand-400 to-accent-400 rounded-[3rem] transform rotate-6 scale-105 opacity-20 blur-lg"></div>
-                    <div className="relative bg-white border-8 border-slate-900 rounded-[3rem] h-[600px] w-[300px] mx-auto shadow-2xl overflow-hidden flex flex-col">
-                      <div className="h-6 w-32 bg-slate-900 absolute top-0 left-1/2 transform -translate-x-1/2 rounded-b-xl z-20"></div>
-                      <div className="flex-1 bg-slate-50 p-4 pt-10 flex flex-col gap-4 relative">
-                        <div className="w-full h-32 bg-gradient-to-r from-brand-500 to-accent-500 rounded-2xl p-4 text-white shadow-inner">
-                          <p className="text-sm opacity-80">Estimated Value</p>
-                          <p className="text-3xl font-bold mt-1">₹ 27,500</p>
-                          <div className="mt-4 h-2 bg-white/30 rounded-full overflow-hidden">
-                            <div className="w-3/4 h-full bg-white rounded-full"></div>
+                    <h1 className="mt-5 text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.05]">
+                      The smarter way to{' '}
+                      <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500">
+                        buy & sell
+                      </span>{' '}
+                      phones in India.
+                    </h1>
+
+                    <p className="mt-5 text-lg text-slate-600 max-w-xl">
+                      Buy certified refurbished phones with warranty, or sell your old device in minutes.
+                      Transparent pricing, doorstep pickup, and real-time tracking.
+                    </p>
+
+                    <div className="mt-7 flex flex-col sm:flex-row gap-3">
+                      <button
+                        onClick={() => navigate('shop')}
+                        className="px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center"
+                      >
+                        Shop Refurbished <i className="fa-solid fa-arrow-right ml-2 text-sm"></i>
+                      </button>
+                      <button
+                        onClick={() => navigate('sell')}
+                        className="px-8 py-4 bg-white text-slate-800 border-2 border-slate-200 rounded-xl font-bold text-lg hover:border-brand-500 hover:text-brand-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center"
+                      >
+                        Sell & Get Quote <i className="fa-solid fa-tags ml-2 text-sm"></i>
+                      </button>
+                    </div>
+
+                    <div className="mt-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {[
+                        { icon: 'fa-shield-halved', title: 'Secure', desc: 'Protected checkout & pickups' },
+                        { icon: 'fa-clock', title: 'Fast', desc: 'Quote in minutes, pickup in 24-48h' },
+                        { icon: 'fa-location-dot', title: 'Doorstep', desc: 'Free pickup & delivery' },
+                      ].map((f) => (
+                        <div key={f.title} className="bg-white/70 border border-slate-200 rounded-2xl p-4 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
+                              <i className={classNames('fa-solid', f.icon)}></i>
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-900">{f.title}</div>
+                              <div className="text-sm text-slate-600">{f.desc}</div>
+                            </div>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="h-24 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center flex-col text-brand-500 animate-bounce-slight">
-                            <i className="fa-solid fa-camera text-2xl mb-2"></i>
-                            <span className="text-xs font-semibold text-slate-600">Scan Device</span>
+                      ))}
+                    </div>
+
+                    <div className="mt-7 flex flex-wrap items-center gap-4 text-xs text-slate-500 font-semibold">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-brand-500"></span> 6-month warranty
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-accent-500"></span> 100% quality checked
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-slate-400"></span> Transparent pricing
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Hero visual */}
+                  <div className="relative animate-fade-in">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-brand-400 to-accent-400 rounded-[2.5rem] rotate-6 scale-105 opacity-20 blur-xl"></div>
+                    <div className="relative bg-white/80 border border-slate-200 rounded-[2.5rem] shadow-2xl overflow-hidden">
+                      <div className="p-6 sm:p-8">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center">
+                              <i className="fa-solid fa-mobile-screen-button"></i>
+                            </div>
+                            <div>
+                              <div className="font-extrabold text-slate-900 leading-tight">ReCell</div>
+                              <div className="text-xs text-slate-500 font-semibold">Smart marketplace</div>
+                            </div>
                           </div>
-                          <div className="h-24 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center flex-col text-accent-500 animate-bounce-slight" style={{ animationDelay: '0.5s' }}>
-                            <i className="fa-solid fa-truck text-2xl mb-2"></i>
-                            <span className="text-xs font-semibold text-slate-600">Schedule</span>
+                          <div className="text-xs font-bold text-brand-600 bg-brand-50 border border-brand-100 px-3 py-1.5 rounded-full">
+                            Live Tracking
                           </div>
                         </div>
-                        <div className="flex-1 bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.05)] mt-4 p-4 border border-slate-100">
-                          <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-4"></div>
-                          <div className="space-y-3">
-                            <div className="h-12 bg-slate-50 rounded-lg animate-pulse"></div>
-                            <div className="h-12 bg-slate-50 rounded-lg animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+
+                        <div className="mt-6 grid grid-cols-1 gap-4">
+                          <div className="bg-gradient-to-r from-brand-600 to-accent-500 rounded-2xl p-5 text-white shadow-inner">
+                            <div className="text-sm opacity-90 font-semibold">Sell quote</div>
+                            <div className="mt-1 text-3xl font-extrabold">₹ 27,500</div>
+                            <div className="mt-4 h-2.5 bg-white/25 rounded-full overflow-hidden">
+                              <div className="w-4/5 h-full bg-white rounded-full"></div>
+                            </div>
+                            <div className="mt-2 text-xs opacity-90">Quote locked • Pickup scheduled</div>
+                          </div>
+
+                          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                            <div className="flex items-center justify-between">
+                              <div className="font-bold text-slate-900">Order status</div>
+                              <div className="text-xs font-bold text-slate-500">#RC-1024</div>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                              {[
+                                { label: 'Placed', done: true },
+                                { label: 'QC Verified', done: true },
+                                { label: 'Shipped', done: false },
+                                { label: 'Delivered', done: false },
+                              ].map((s) => (
+                                <div key={s.label} className="flex items-center gap-3">
+                                  <div className={classNames('w-6 h-6 rounded-full flex items-center justify-center', s.done ? 'bg-brand-500 text-white' : 'bg-slate-100 text-slate-400')}>
+                                    <i className={classNames('fa-solid', s.done ? 'fa-check' : 'fa-minus')} />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="text-sm font-semibold text-slate-800">{s.label}</div>
+                                    <div className="h-2 mt-2 bg-slate-100 rounded-full overflow-hidden">
+                                      <div className={classNames('h-full rounded-full', s.done ? 'w-full bg-brand-500' : 'w-1/4 bg-slate-300')} />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Social proof */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
+                <div className="bg-white/70 border border-slate-200 rounded-3xl shadow-sm p-6 md:p-8">
+                  <div className="flex flex-col md:flex-row gap-6 md:items-center md:justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-slate-500">Trusted by</div>
+                      <div className="mt-1 text-2xl font-extrabold text-slate-900">
+                        50,000+ buyers & sellers
+                      </div>
+                      <div className="mt-2 text-slate-600">
+                        Real photos, verified device checks, and clear pricing.
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto">
+                      {['Quality Checked', 'Warranty Included', 'Instant Quote', 'Doorstep Service'].map((t) => (
+                        <div key={t} className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 text-center">
+                          {t}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                    <div className="text-sm font-bold text-brand-600">Sell in 3 steps</div>
+                    <div className="mt-2 text-2xl font-extrabold text-slate-900">Get paid fast, without bargaining</div>
+                    <div className="mt-6 space-y-4">
+                      {[
+                        { n: 1, title: 'Select device', desc: 'Choose brand, model, condition & accessories.' },
+                        { n: 2, title: 'Get instant quote', desc: 'Transparent pricing locked for 7 days.' },
+                        { n: 3, title: 'Free pickup', desc: 'Doorstep pickup, secure payout after verification.' },
+                      ].map((s) => (
+                        <div key={s.n} className="flex gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center font-extrabold text-brand-700">
+                            {s.n}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{s.title}</div>
+                            <div className="text-slate-600 text-sm">{s.desc}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6">
+                      <button onClick={() => navigate('sell')} className="w-full sm:w-auto px-6 py-3 bg-brand-500 text-white rounded-xl font-bold hover:bg-brand-600 transition-colors">
+                        Start Selling
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                    <div className="text-sm font-bold text-accent-600">Buy with confidence</div>
+                    <div className="mt-2 text-2xl font-extrabold text-slate-900">Refurbished, not “used”</div>
+                    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {[
+                        { icon: 'fa-microscope', title: '30-point QC', desc: 'Every device is tested.' },
+                        { icon: 'fa-arrows-rotate', title: 'Easy returns', desc: 'Simple support process.' },
+                        { icon: 'fa-certificate', title: 'Warranty', desc: '6 months included.' },
+                        { icon: 'fa-truck', title: 'Fast shipping', desc: 'Packed & shipped safely.' },
+                      ].map((c) => (
+                        <div key={c.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-800 flex items-center justify-center">
+                            <i className={classNames('fa-solid', c.icon)} />
+                          </div>
+                          <div className="mt-3 font-bold text-slate-900">{c.title}</div>
+                          <div className="text-sm text-slate-600">{c.desc}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6">
+                      <button onClick={() => navigate('shop')} className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors">
+                        Browse Phones
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Testimonials */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+                <div className="text-center">
+                  <div className="text-sm font-bold text-slate-500">Loved by customers</div>
+                  <div className="mt-2 text-3xl md:text-4xl font-extrabold text-slate-900">
+                    A smoother upgrade every time
+                  </div>
+                </div>
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {[
+                    { name: 'Ananya', text: 'Sold my phone in 10 minutes. Pickup was on time and payment was smooth.' },
+                    { name: 'Rohit', text: 'Bought a refurbished device—looked brand new. Warranty gave real peace of mind.' },
+                    { name: 'Meera', text: 'Clear pricing and tracking made the whole process super transparent.' },
+                  ].map((t) => (
+                    <div key={t.name} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                      <div className="flex items-center gap-2 text-yellow-500">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <i key={n} className="fa-solid fa-star text-sm"></i>
+                        ))}
+                      </div>
+                      <div className="mt-4 text-slate-700">{t.text}</div>
+                      <div className="mt-5 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-accent-500"></div>
+                        <div>
+                          <div className="font-extrabold text-slate-900">{t.name}</div>
+                          <div className="text-xs text-slate-500 font-semibold">Verified customer</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Final CTA */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+                <div className="bg-slate-900 rounded-3xl overflow-hidden relative">
+                  <div className="absolute inset-0 opacity-30 bg-gradient-to-r from-brand-500 to-accent-500"></div>
+                  <div className="relative p-8 md:p-12 flex flex-col md:flex-row gap-8 md:items-center md:justify-between">
+                    <div>
+                      <div className="text-sm font-bold text-white/80">Ready to upgrade?</div>
+                      <div className="mt-2 text-3xl md:text-4xl font-extrabold text-white">Buy smarter. Sell faster.</div>
+                      <div className="mt-3 text-white/80 max-w-xl">
+                        Create an account to track every step of your buy order or sell pickup in one place.
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button onClick={() => navigate('shop')} className="px-6 py-3 rounded-xl font-extrabold bg-white text-slate-900 hover:bg-slate-100 transition-colors">
+                        Shop Now
+                      </button>
+                      <button onClick={() => navigate('sell')} className="px-6 py-3 rounded-xl font-extrabold bg-white/10 text-white border border-white/20 hover:bg-white/15 transition-colors">
+                        Get Sell Quote
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -951,6 +1246,357 @@ export default function App() {
                   </form>
                 </div>
               </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* LOGIN */}
+        {section === 'login' ? (
+          <section className="py-12 bg-slate-50 min-h-[calc(100vh-4rem)]">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                  <div className="text-sm font-bold text-brand-600">Welcome back</div>
+                  <h2 className="mt-2 text-3xl font-extrabold text-slate-900">Login to track everything</h2>
+                  <p className="mt-2 text-slate-600">
+                    See your buy order progress and sell pickup timeline in one dashboard.
+                  </p>
+
+                  {authError ? (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm font-semibold">
+                      {authError}
+                    </div>
+                  ) : null}
+
+                  <form
+                    className="mt-6 space-y-4"
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      setAuthError('')
+                      setAuthLoading(true)
+                      try {
+                        const form = e.target
+                        const formData = new FormData(form)
+                        const payload = Object.fromEntries(formData.entries())
+                        const res = await fetch(`${apiBase}/api/auth/login`, {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify(payload),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) throw new Error(data?.error || 'Login failed')
+                        setAuth({ token: data.token, user: data.user })
+                        form.reset()
+                        setToast({ open: true, message: 'Logged in' })
+                        navigate('track')
+                        await refreshTracking()
+                      } catch (err) {
+                        setAuthError(err?.message || 'Login failed')
+                      } finally {
+                        setAuthLoading(false)
+                      }
+                    }}
+                  >
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                      <input name="email" type="email" required className="w-full border-slate-300 rounded-xl shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
+                      <input name="password" type="password" required className="w-full border-slate-300 rounded-xl shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white" />
+                      <div className="mt-2 text-xs text-slate-500">Minimum 6 characters.</div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full px-6 py-4 bg-slate-900 text-white rounded-xl font-extrabold text-lg hover:bg-slate-800 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {authLoading ? 'Signing in...' : 'Login'}
+                    </button>
+                    <div className="text-sm text-slate-600 text-center">
+                      New here?{' '}
+                      <button type="button" onClick={() => navigate('signup')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                        Create an account
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="rounded-3xl overflow-hidden border border-slate-200 shadow-sm bg-gradient-to-br from-slate-900 via-slate-900 to-brand-900 p-8 text-white relative">
+                  <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-brand-500/20 blur-3xl"></div>
+                  <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-accent-500/20 blur-3xl"></div>
+                  <div className="relative">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/10 text-sm font-semibold">
+                      <i className="fa-solid fa-chart-line"></i> Progress tracking
+                    </div>
+                    <div className="mt-4 text-3xl font-extrabold">Track every step</div>
+                    <div className="mt-2 text-white/80">
+                      Orders, pickups, and updates—always visible, always simple.
+                    </div>
+                    <div className="mt-6 space-y-3">
+                      {[
+                        { icon: 'fa-truck', text: 'Delivery & pickup status updates' },
+                        { icon: 'fa-bell', text: 'Clear milestones and timeline' },
+                        { icon: 'fa-shield-halved', text: 'Secure access to your history' },
+                      ].map((x) => (
+                        <div key={x.text} className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-4">
+                          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                            <i className={classNames('fa-solid', x.icon)}></i>
+                          </div>
+                          <div className="font-semibold">{x.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* SIGNUP */}
+        {section === 'signup' ? (
+          <section className="py-12 bg-slate-50 min-h-[calc(100vh-4rem)]">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+                <div className="p-8">
+                  <div className="text-sm font-bold text-brand-600">Create account</div>
+                  <h2 className="mt-2 text-3xl font-extrabold text-slate-900">Sign up for ReCell</h2>
+                  <p className="mt-2 text-slate-600">Track orders and pickups, and keep your history safe.</p>
+
+                  {authError ? (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm font-semibold">
+                      {authError}
+                    </div>
+                  ) : null}
+
+                  <form
+                    className="mt-6 space-y-4"
+                    onSubmit={async (e) => {
+                      e.preventDefault()
+                      setAuthError('')
+                      setAuthLoading(true)
+                      try {
+                        const form = e.target
+                        const formData = new FormData(form)
+                        const payload = Object.fromEntries(formData.entries())
+                        const res = await fetch(`${apiBase}/api/auth/signup`, {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify(payload),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) throw new Error(data?.error || 'Signup failed')
+                        setAuth({ token: data.token, user: data.user })
+                        form.reset()
+                        setToast({ open: true, message: 'Account created' })
+                        navigate('track')
+                        await refreshTracking()
+                      } catch (err) {
+                        setAuthError(err?.message || 'Signup failed')
+                      } finally {
+                        setAuthLoading(false)
+                      }
+                    }}
+                  >
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Name (optional)</label>
+                      <input name="name" type="text" className="w-full border-slate-300 rounded-xl shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Email</label>
+                      <input name="email" type="email" required className="w-full border-slate-300 rounded-xl shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Password</label>
+                      <input name="password" type="password" required className="w-full border-slate-300 rounded-xl shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white" />
+                      <div className="mt-2 text-xs text-slate-500">Minimum 6 characters.</div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full px-6 py-4 bg-brand-500 text-white rounded-xl font-extrabold text-lg hover:bg-brand-600 transition-all shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {authLoading ? 'Creating...' : 'Sign up'}
+                    </button>
+                    <div className="text-sm text-slate-600 text-center">
+                      Already have an account?{' '}
+                      <button type="button" onClick={() => navigate('login')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                        Login
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="p-8 bg-gradient-to-br from-brand-600 to-accent-500 text-white">
+                  <div className="text-sm font-bold text-white/90">What you get</div>
+                  <div className="mt-2 text-3xl font-extrabold">One dashboard</div>
+                  <div className="mt-2 text-white/90">Buy & sell progress in a single view.</div>
+                  <div className="mt-6 space-y-3">
+                    {[
+                      { icon: 'fa-list-check', text: 'Order timeline with milestones' },
+                      { icon: 'fa-truck-fast', text: 'Pickup & delivery tracking' },
+                      { icon: 'fa-clock', text: 'History of every transaction' },
+                    ].map((x) => (
+                      <div key={x.text} className="flex items-center gap-3 bg-white/10 border border-white/15 rounded-2xl p-4">
+                        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                          <i className={classNames('fa-solid', x.icon)}></i>
+                        </div>
+                        <div className="font-semibold">{x.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* TRACK */}
+        {section === 'track' ? (
+          <section className="py-12 bg-slate-50 min-h-[calc(100vh-4rem)]">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                  <div className="text-sm font-bold text-slate-500">Tracking</div>
+                  <h2 className="mt-1 text-3xl md:text-4xl font-extrabold text-slate-900">Your buy & sell progress</h2>
+                  <p className="mt-2 text-slate-600">See current status and past updates for your orders and pickups.</p>
+                </div>
+                <div className="flex gap-2">
+                  {!auth?.token ? (
+                    <>
+                      <button onClick={() => navigate('login')} className="px-4 py-3 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 hover:border-brand-400 hover:text-brand-600 transition-colors">
+                        Login
+                      </button>
+                      <button onClick={() => navigate('signup')} className="px-4 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors">
+                        Sign up
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={refreshTracking}
+                      disabled={trackLoading}
+                      className="px-4 py-3 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 hover:border-brand-400 hover:text-brand-600 transition-colors disabled:opacity-60"
+                    >
+                      {trackLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!auth?.token ? (
+                <div className="mt-8 bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
+                  <div className="text-2xl font-extrabold text-slate-900">Login required</div>
+                  <div className="mt-2 text-slate-600">
+                    Create an account to track your orders and pickups. (For new orders/pickups, we’ll automatically link them to your account.)
+                  </div>
+                  <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                    <button onClick={() => navigate('login')} className="px-6 py-3 rounded-xl bg-slate-900 text-white font-extrabold hover:bg-slate-800 transition-colors">
+                      Login
+                    </button>
+                    <button onClick={() => navigate('signup')} className="px-6 py-3 rounded-xl bg-brand-500 text-white font-extrabold hover:bg-brand-600 transition-colors">
+                      Sign up
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-extrabold text-slate-900">Buy orders</div>
+                      <div className="text-sm font-bold text-slate-500">{myOrders.length} total</div>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      {myOrders.length === 0 ? (
+                        <div className="text-slate-600">
+                          No orders yet.{' '}
+                          <button onClick={() => navigate('shop')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                            Shop phones
+                          </button>
+                        </div>
+                      ) : (
+                        myOrders
+                          .slice()
+                          .reverse()
+                          .map((o) => (
+                            <div key={o.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <div className="font-extrabold text-slate-900">{o.id}</div>
+                                  <div className="text-sm text-slate-600">
+                                    {o.items?.length || 0} items • {formatCurrency(o.totals?.total || 0)}
+                                  </div>
+                                </div>
+                                <div className="text-xs font-extrabold px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                                  {o.status}
+                                </div>
+                              </div>
+                              <div className="mt-4 space-y-2">
+                                {(o.timeline || []).slice(-4).map((t, idx) => (
+                                  <div key={`${t.at}_${idx}`} className="flex items-center gap-3">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-brand-500"></div>
+                                    <div className="text-sm font-semibold text-slate-800">{t.label || t.status}</div>
+                                    <div className="ml-auto text-xs text-slate-500 font-semibold">
+                                      {new Date(t.at).toLocaleString()}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-extrabold text-slate-900">Sell pickups</div>
+                      <div className="text-sm font-bold text-slate-500">{myPickups.length} total</div>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      {myPickups.length === 0 ? (
+                        <div className="text-slate-600">
+                          No pickups yet.{' '}
+                          <button onClick={() => navigate('sell')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                            Get a quote
+                          </button>
+                        </div>
+                      ) : (
+                        myPickups
+                          .slice()
+                          .reverse()
+                          .map((p) => (
+                            <div key={p.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <div className="font-extrabold text-slate-900">{p.id}</div>
+                                  <div className="text-sm text-slate-600">
+                                    {p.deviceName || `${p.brand || ''} ${p.model || ''}`.trim() || 'Device'} •{' '}
+                                    {formatCurrency(p.quote || 0)}
+                                  </div>
+                                </div>
+                                <div className="text-xs font-extrabold px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700">
+                                  {p.status}
+                                </div>
+                              </div>
+                              <div className="mt-4 space-y-2">
+                                {(p.timeline || []).slice(-4).map((t, idx) => (
+                                  <div key={`${t.at}_${idx}`} className="flex items-center gap-3">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-accent-500"></div>
+                                    <div className="text-sm font-semibold text-slate-800">{t.label || t.status}</div>
+                                    <div className="ml-auto text-xs text-slate-500 font-semibold">
+                                      {new Date(t.at).toLocaleString()}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         ) : null}
