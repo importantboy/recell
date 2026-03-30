@@ -3,73 +3,85 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 const CART_KEY = 'web-app-0da18758-cart'
 const AUTH_KEY = 'recell-auth'
 
-const productsSeed = [
+/** Demo cards on the home page only (full catalog still loads from API after login). */
+const LANDING_SAMPLE_PRODUCTS = [
   {
-    id: 1,
+    id: 'landing-1',
     brand: 'Apple',
-    name: 'iPhone 13 Pro',
-    storage: '128GB',
-    price: 45000,
-    oldPrice: 119900,
-    img: 'https://images.unsplash.com/photo-1632661674596-df8be070a5c5?auto=format&fit=crop&q=80&w=400',
-    condition: 'Excellent',
-  },
-  {
-    id: 2,
-    brand: 'Samsung',
-    name: 'Galaxy S22 Ultra',
+    name: 'iPhone 14 Pro',
     storage: '256GB',
-    price: 52000,
-    oldPrice: 109999,
-    img: 'https://images.unsplash.com/photo-1644982647844-5ee1bdc5b114?auto=format&fit=crop&q=80&w=400',
-    condition: 'Good',
-  },
-  {
-    id: 3,
-    brand: 'Apple',
-    name: 'iPhone 12',
-    storage: '64GB',
-    price: 25000,
-    oldPrice: 65900,
-    img: 'https://images.unsplash.com/photo-1605236453806-6ff36851218e?auto=format&fit=crop&q=80&w=400',
-    condition: 'Fair',
-  },
-  {
-    id: 4,
-    brand: 'OnePlus',
-    name: 'OnePlus 10 Pro',
-    storage: '128GB',
-    price: 35000,
-    oldPrice: 66999,
-    img: 'https://images.unsplash.com/photo-1678911820864-e2c567c655d7?auto=format&fit=crop&q=80&w=400',
+    price: 76999,
+    oldPrice: 129900,
+    img: 'https://images.unsplash.com/photo-1663499482525-1e0c8c0c7f3b?auto=format&fit=crop&q=80&w=400',
     condition: 'Excellent',
   },
   {
-    id: 5,
-    brand: 'Apple',
-    name: 'iPhone 14',
-    storage: '128GB',
-    price: 58000,
-    oldPrice: 79900,
-    img: 'https://images.unsplash.com/photo-1663465374413-83c700ef5c88?auto=format&fit=crop&q=80&w=400',
-    condition: 'Excellent',
-  },
-  {
-    id: 6,
+    id: 'landing-2',
     brand: 'Samsung',
-    name: 'Galaxy Z Flip 3',
+    name: 'Galaxy S23 Ultra',
+    storage: '256GB',
+    price: 79999,
+    oldPrice: 124999,
+    img: 'https://images.unsplash.com/photo-1673117273342-1c75b07bf988?auto=format&fit=crop&q=80&w=400',
+    condition: 'Excellent',
+  },
+  {
+    id: 'landing-3',
+    brand: 'OnePlus',
+    name: 'OnePlus 11 5G',
+    storage: '256GB',
+    price: 41999,
+    oldPrice: 61999,
+    img: 'https://images.unsplash.com/photo-1661961112953-1c9a09852ffb?auto=format&fit=crop&q=80&w=400',
+    condition: 'Excellent',
+  },
+  {
+    id: 'landing-4',
+    brand: 'Google',
+    name: 'Pixel 7',
     storage: '128GB',
-    price: 32000,
-    oldPrice: 84999,
-    img: 'https://images.unsplash.com/photo-1633511090164-b490e6669c27?auto=format&fit=crop&q=80&w=400',
+    price: 34999,
+    oldPrice: 59999,
+    img: 'https://images.unsplash.com/photo-1661794437649-9e8bd2d96ffb?auto=format&fit=crop&q=80&w=400',
     condition: 'Good',
   },
 ]
 
-const sellBasePrices = {
-  apple: { 'iPhone 14': 40000, 'iPhone 13': 30000, 'iPhone 12': 20000 },
-  samsung: { 'S23 Ultra': 55000, 'S22 Ultra': 40000, 'S21 FE': 15000 },
-  oneplus: { '11 5G': 35000, '10 Pro': 25000, '9R': 12000 },
+/** Mirrors `backend/seed/seedDatabase.js` SELL_BASE_PRICES so model options exist before / after API load. */
+const FALLBACK_SELL_BY_BRAND = {
+  apple: ['iPhone 14 Pro', 'iPhone 14', 'iPhone 13 Pro', 'iPhone 13', 'iPhone 12', 'iPhone 11'],
+  samsung: ['S23 Ultra', 'S22 Ultra', 'S21 FE', 'Z Flip 3'],
+  oneplus: ['11 5G', '10 Pro', '9R'],
+  google: ['Pixel 7', 'Pixel 6a'],
+  xiaomi: ['Redmi Note 12 Pro', 'Mi 11X'],
+  motorola: ['Edge 30'],
+  nothing: ['Phone (1)'],
+  realme: ['GT Neo 3'],
+}
+
+/** Used when `img` is missing or fails to load (no external dependency). */
+const PRODUCT_IMAGE_PLACEHOLDER =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+      <rect fill="#f1f5f9" width="400" height="400"/>
+      <g fill="#94a3b8" font-family="system-ui,sans-serif" text-anchor="middle">
+        <text x="200" y="185" font-size="14" font-weight="600">No image</text>
+        <text x="200" y="215" font-size="12">Product</text>
+      </g>
+    </svg>`
+  )
+
+function productImageSrc(url) {
+  if (url && String(url).trim()) return String(url).trim()
+  return PRODUCT_IMAGE_PLACEHOLDER
+}
+
+function handleProductImageError(e) {
+  const el = e.currentTarget
+  if (el.getAttribute('data-img-fallback') === '1') return
+  el.setAttribute('data-img-fallback', '1')
+  el.src = PRODUCT_IMAGE_PLACEHOLDER
 }
 
 function formatCurrency(amount) {
@@ -82,6 +94,20 @@ function formatCurrency(amount) {
 
 function classNames(...xs) {
   return xs.filter(Boolean).join(' ')
+}
+
+function navLinkClass(active) {
+  return classNames(
+    'transition-colors rounded-lg px-2 py-1.5 -mx-1',
+    active ? 'text-brand-600 font-bold bg-brand-50 ring-1 ring-brand-100' : 'text-slate-600 hover:text-brand-500'
+  )
+}
+
+function navMobileLinkClass(active) {
+  return classNames(
+    'block w-full text-left px-3 py-2 rounded-md text-base font-medium transition-colors',
+    active ? 'text-brand-600 font-bold bg-brand-50' : 'text-slate-700 hover:text-brand-500 hover:bg-slate-50'
+  )
 }
 
 export default function App() {
@@ -100,7 +126,9 @@ export default function App() {
     }
   })
 
-  const [products, setProducts] = useState(productsSeed)
+  const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [sellCatalog, setSellCatalog] = useState({ byBrand: {} })
   const [cart, setCart] = useState(() => {
     try {
       const raw = localStorage.getItem(CART_KEY)
@@ -126,6 +154,25 @@ export default function App() {
   const [accBill, setAccBill] = useState(false)
   const [finalQuote, setFinalQuote] = useState(0)
   const [quoteDeviceName, setQuoteDeviceName] = useState('')
+  const [sellPhotoPreviews, setSellPhotoPreviews] = useState([])
+  const sellPhotoInputRef = useRef(null)
+  const sellPhotoPreviewsRef = useRef([])
+
+  useEffect(() => {
+    sellPhotoPreviewsRef.current = sellPhotoPreviews
+  }, [sellPhotoPreviews])
+
+  useEffect(() => {
+    return () => {
+      sellPhotoPreviewsRef.current.forEach((p) => {
+        try {
+          URL.revokeObjectURL(p.url)
+        } catch {
+          /* ignore */
+        }
+      })
+    }
+  }, [])
 
   const [successModal, setSuccessModal] = useState({ open: false, title: '', message: '' })
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -135,6 +182,13 @@ export default function App() {
   const [trackLoading, setTrackLoading] = useState(false)
   const [myOrders, setMyOrders] = useState([])
   const [myPickups, setMyPickups] = useState([])
+  const [authPromptOpen, setAuthPromptOpen] = useState(false)
+
+  const authedFetch = async (url, init = {}) => {
+    const headers = new Headers(init.headers || {})
+    if (auth?.token) headers.set('authorization', `Bearer ${auth.token}`)
+    return fetch(url, { ...init, headers })
+  }
 
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(cart))
@@ -145,21 +199,37 @@ export default function App() {
   }, [auth])
 
   useEffect(() => {
+    if (!auth?.token) {
+      setProducts([])
+      setSellCatalog({ byBrand: {} })
+      return
+    }
     let ignore = false
     ;(async () => {
+      setProductsLoading(true)
       try {
-        const res = await fetch(`${apiBase}/api/products`)
-        if (!res.ok) return
-        const data = await res.json()
-        if (!ignore && data && Array.isArray(data.products)) setProducts(data.products)
+        const [pRes, sRes] = await Promise.all([
+          authedFetch(`${apiBase}/api/products`),
+          authedFetch(`${apiBase}/api/sell/catalog`),
+        ])
+        if (!ignore && pRes.ok) {
+          const data = await pRes.json()
+          if (Array.isArray(data.products)) setProducts(data.products)
+        }
+        if (!ignore && sRes.ok) {
+          const data = await sRes.json()
+          if (data.byBrand) setSellCatalog({ byBrand: data.byBrand })
+        }
       } catch {
-        // If backend is down, we keep seeded products.
+        if (!ignore) setProducts([])
+      } finally {
+        if (!ignore) setProductsLoading(false)
       }
     })()
     return () => {
       ignore = true
     }
-  }, [apiBase])
+  }, [apiBase, auth?.token])
 
   useEffect(() => {
     const onScroll = () => {
@@ -187,11 +257,55 @@ export default function App() {
     window.scrollTo(0, 0)
   }
 
-  const authedFetch = async (url, init = {}) => {
-    const headers = new Headers(init.headers || {})
-    if (auth?.token) headers.set('authorization', `Bearer ${auth.token}`)
-    return fetch(url, { ...init, headers })
+  const goShop = () => {
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in or sign up to browse and buy phones.' })
+      navigate('login')
+      return
+    }
+    navigate('shop')
   }
+  const goSell = () => {
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in or sign up to sell your phone.' })
+      navigate('login')
+      return
+    }
+    navigate('sell')
+  }
+  const goCart = () => {
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in to use your cart.' })
+      navigate('login')
+      return
+    }
+    navigate('cart')
+  }
+  const goCheckout = () => {
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in to checkout.' })
+      navigate('login')
+      return
+    }
+    navigate('checkout')
+  }
+
+  /** Landing “Buy now”: open login/signup choice if guest; otherwise go to shop. */
+  const handleLandingBuyNow = () => {
+    if (auth?.token) {
+      navigate('shop')
+      return
+    }
+    setAuthPromptOpen(true)
+  }
+
+  useEffect(() => {
+    const protectedSections = ['shop', 'sell', 'cart', 'checkout']
+    if (!auth?.token && protectedSections.includes(section)) {
+      setToast({ open: true, message: 'Please log in or sign up to continue.' })
+      navigate('login')
+    }
+  }, [section, auth?.token])
 
   const refreshTracking = async () => {
     if (!auth?.token) return
@@ -212,11 +326,19 @@ export default function App() {
 
   const logout = () => {
     setAuth({ token: null, user: null })
+    setProducts([])
+    setSellCatalog({ byBrand: {} })
+    setCart([])
     setToast({ open: true, message: 'Logged out' })
     navigate('home')
   }
 
   const addToCart = (productId) => {
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in to add items to your cart.' })
+      navigate('login')
+      return
+    }
     const product = products.find((p) => p.id === productId)
     if (!product) return
     setCart((prev) => {
@@ -242,9 +364,70 @@ export default function App() {
   }
 
   const modelsForBrand = useMemo(() => {
-    if (!sellBrand || !sellBasePrices[sellBrand]) return []
-    return Object.keys(sellBasePrices[sellBrand])
+    if (!sellBrand) return []
+    const rows = sellCatalog.byBrand?.[sellBrand]
+    if (Array.isArray(rows) && rows.length > 0) {
+      return [...new Set(rows.map((x) => x.model).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+    }
+    const fb = FALLBACK_SELL_BY_BRAND[sellBrand]
+    return fb ? [...fb] : []
+  }, [sellBrand, sellCatalog])
+
+  const sellBrandKeys = useMemo(() => {
+    const keys = Object.keys(sellCatalog.byBrand || {})
+    if (keys.length > 0) return keys.sort()
+    return Object.keys(FALLBACK_SELL_BY_BRAND).sort()
+  }, [sellCatalog])
+
+  const sellBrandLabel = useMemo(() => {
+    if (!sellBrand) return ''
+    return sellBrand.charAt(0).toUpperCase() + sellBrand.slice(1)
   }, [sellBrand])
+
+  const revokeSellPhotoUrls = (items) => {
+    items.forEach((p) => {
+      try {
+        URL.revokeObjectURL(p.url)
+      } catch {
+        /* ignore */
+      }
+    })
+  }
+
+  const applySellPhotoFiles = (fileList) => {
+    const files = fileList.filter((f) => f.type.startsWith('image/')).slice(0, 8)
+    setSellPhotoPreviews((prev) => {
+      revokeSellPhotoUrls(prev)
+      return files.map((f) => ({ url: URL.createObjectURL(f), name: f.name }))
+    })
+  }
+
+  const handleSellPhotosChange = (e) => {
+    applySellPhotoFiles(Array.from(e.target.files || []))
+  }
+
+  const handleSellPhotosDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    applySellPhotoFiles(Array.from(e.dataTransfer.files || []))
+  }
+
+  const removeSellPhotoAt = (index) => {
+    setSellPhotoPreviews((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(index, 1)
+      if (removed) URL.revokeObjectURL(removed.url)
+      return next
+    })
+  }
+
+  const clearSellPhotos = () => {
+    setSellPhotoPreviews((prev) => {
+      revokeSellPhotoUrls(prev)
+      return []
+    })
+    if (sellPhotoInputRef.current) sellPhotoInputRef.current.value = ''
+  }
 
   const nextSellStep = (step) => {
     if (sellStep === 1 && step === 2) {
@@ -256,24 +439,36 @@ export default function App() {
     setSellStep(step)
   }
 
-  const generateQuote = () => {
+  const generateQuote = async () => {
     if (!sellBrand || !sellModel) return
-    let basePrice = sellBasePrices[sellBrand][sellModel]
-
-    if (sellStorage === '256') basePrice += 3000
-    if (sellStorage === '512') basePrice += 6000
-
-    const multiplier = sellCondition === 'excellent' ? 1.1 : sellCondition === 'good' ? 0.9 : 0.7
-
-    if (!accBox) basePrice -= 500
-    if (!accCharger) basePrice -= 1000
-
-    const final = Math.round(basePrice * multiplier)
-    const brandLabel = sellBrand.charAt(0).toUpperCase() + sellBrand.slice(1)
-    const condLabel = sellCondition.charAt(0).toUpperCase() + sellCondition.slice(1)
-    setQuoteDeviceName(`${brandLabel} ${sellModel} (${sellStorage}GB) - ${condLabel}`)
-    setFinalQuote(final)
-    nextSellStep(4)
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in to get a sell quote.' })
+      navigate('login')
+      return
+    }
+    try {
+      const res = await authedFetch(`${apiBase}/api/sell/quote`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          brand: sellBrand,
+          model: sellModel,
+          condition: sellCondition,
+          storageGb: Number(sellStorage),
+          accessories: { box: accBox, charger: accCharger, bill: accBill },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not get quote')
+      const final = data.quote
+      const brandLabel = sellBrand.charAt(0).toUpperCase() + sellBrand.slice(1)
+      const condLabel = sellCondition.charAt(0).toUpperCase() + sellCondition.slice(1)
+      setQuoteDeviceName(`${brandLabel} ${sellModel} (${sellStorage}GB) - ${condLabel}`)
+      setFinalQuote(final)
+      nextSellStep(4)
+    } catch (e) {
+      window.alert(e?.message || 'Quote failed')
+    }
   }
 
   const resetSellForm = () => {
@@ -287,6 +482,11 @@ export default function App() {
     setFinalQuote(0)
     setQuoteDeviceName('')
     setSellStep(1)
+    setSellPhotoPreviews((prev) => {
+      revokeSellPhotoUrls(prev)
+      return []
+    })
+    if (sellPhotoInputRef.current) sellPhotoInputRef.current.value = ''
   }
 
   const schedulePickup = async () => {
@@ -317,6 +517,11 @@ export default function App() {
 
   const processCheckout = async (e) => {
     e.preventDefault()
+    if (!auth?.token) {
+      setToast({ open: true, message: 'Please log in to place an order.' })
+      navigate('login')
+      return
+    }
     if (cart.length === 0) return
     setCheckoutLoading(true)
     try {
@@ -375,16 +580,16 @@ export default function App() {
 
             {/* Desktop menu */}
             <div className="hidden md:flex space-x-8 items-center">
-              <button onClick={() => navigate('home')} className="text-slate-600 hover:text-brand-500 font-medium transition-colors">
+              <button onClick={() => navigate('home')} className={navLinkClass(section === 'home')}>
                 Home
               </button>
-              <button onClick={() => navigate('shop')} className="text-slate-600 hover:text-brand-500 font-medium transition-colors">
+              <button onClick={() => goShop()} className={navLinkClass(section === 'shop')}>
                 Buy Phone
               </button>
-              <button onClick={() => navigate('sell')} className="text-brand-500 font-semibold hover:text-brand-600 transition-colors">
+              <button onClick={() => goSell()} className={navLinkClass(section === 'sell')}>
                 Sell Phone
               </button>
-              <button onClick={() => navigate('track')} className="text-slate-600 hover:text-brand-500 font-medium transition-colors">
+              <button onClick={() => navigate('track')} className={navLinkClass(section === 'track')}>
                 Track
               </button>
 
@@ -399,16 +604,37 @@ export default function App() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <button onClick={() => navigate('login')} className="px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:border-brand-400 hover:text-brand-600 transition-colors">
+                  <button
+                    onClick={() => navigate('login')}
+                    className={classNames(
+                      'px-3 py-2 rounded-lg font-semibold transition-colors',
+                      section === 'login'
+                        ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-200'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400 hover:text-brand-600'
+                    )}
+                  >
                     Login
                   </button>
-                  <button onClick={() => navigate('signup')} className="px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">
+                  <button
+                    onClick={() => navigate('signup')}
+                    className={classNames(
+                      'px-3 py-2 rounded-lg font-semibold transition-colors',
+                      section === 'signup' ? 'bg-brand-600 text-white ring-2 ring-brand-300' : 'bg-slate-900 text-white hover:bg-slate-800'
+                    )}
+                  >
                     Sign up
                   </button>
                 </div>
               )}
 
-              <button onClick={() => navigate('cart')} className="relative p-2 text-slate-600 hover:text-brand-500 transition-colors group" aria-label="Cart">
+              <button
+                onClick={() => goCart()}
+                className={classNames(
+                  'relative p-2 transition-colors group',
+                  section === 'cart' || section === 'checkout' ? 'text-brand-600' : 'text-slate-600 hover:text-brand-500'
+                )}
+                aria-label="Cart"
+              >
                 <i className="fa-solid fa-cart-shopping text-xl group-hover:scale-110 transition-transform"></i>
                 {cartCount > 0 ? (
                   <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
@@ -420,7 +646,14 @@ export default function App() {
 
             {/* Mobile */}
             <div className="md:hidden flex items-center space-x-4">
-              <button onClick={() => navigate('cart')} className="relative p-2 text-slate-600" aria-label="Cart">
+              <button
+                onClick={() => goCart()}
+                className={classNames(
+                  'relative p-2',
+                  section === 'cart' || section === 'checkout' ? 'text-brand-600' : 'text-slate-600'
+                )}
+                aria-label="Cart"
+              >
                 <i className="fa-solid fa-cart-shopping text-xl"></i>
                 {cartCount > 0 ? (
                   <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
@@ -442,16 +675,16 @@ export default function App() {
         {/* Mobile menu panel */}
         <div className={classNames(mobileMenuOpen ? '' : 'hidden', 'md:hidden bg-white border-t border-slate-100 absolute w-full shadow-lg')}>
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <button onClick={() => navigate('home')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-brand-500 hover:bg-slate-50">
+            <button onClick={() => navigate('home')} className={navMobileLinkClass(section === 'home')}>
               Home
             </button>
-            <button onClick={() => navigate('shop')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-brand-500 hover:bg-slate-50">
+            <button onClick={() => goShop()} className={navMobileLinkClass(section === 'shop')}>
               Buy Phone
             </button>
-            <button onClick={() => navigate('sell')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-brand-500 hover:bg-brand-50">
+            <button onClick={() => goSell()} className={navMobileLinkClass(section === 'sell')}>
               Sell Phone
             </button>
-            <button onClick={() => navigate('track')} className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-slate-700 hover:text-brand-500 hover:bg-slate-50">
+            <button onClick={() => navigate('track')} className={navMobileLinkClass(section === 'track')}>
               Track
             </button>
             {auth?.token ? (
@@ -460,10 +693,24 @@ export default function App() {
               </button>
             ) : (
               <div className="pt-2 grid grid-cols-2 gap-2">
-                <button onClick={() => navigate('login')} className="px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:border-brand-400 hover:text-brand-600 transition-colors">
+                <button
+                  onClick={() => navigate('login')}
+                  className={classNames(
+                    'px-3 py-2 rounded-lg font-semibold transition-colors',
+                    section === 'login'
+                      ? 'bg-brand-50 text-brand-700 ring-2 ring-brand-200'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-400 hover:text-brand-600'
+                  )}
+                >
                   Login
                 </button>
-                <button onClick={() => navigate('signup')} className="px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors">
+                <button
+                  onClick={() => navigate('signup')}
+                  className={classNames(
+                    'px-3 py-2 rounded-lg font-semibold transition-colors',
+                    section === 'signup' ? 'bg-brand-600 text-white ring-2 ring-brand-300' : 'bg-slate-900 text-white hover:bg-slate-800'
+                  )}
+                >
                   Sign up
                 </button>
               </div>
@@ -510,13 +757,13 @@ export default function App() {
 
                     <div className="mt-7 flex flex-col sm:flex-row gap-3">
                       <button
-                        onClick={() => navigate('shop')}
+                        onClick={() => goShop()}
                         className="px-8 py-4 bg-slate-900 text-white rounded-xl font-bold text-lg hover:bg-slate-800 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center"
                       >
                         Shop Refurbished <i className="fa-solid fa-arrow-right ml-2 text-sm"></i>
                       </button>
                       <button
-                        onClick={() => navigate('sell')}
+                        onClick={() => goSell()}
                         className="px-8 py-4 bg-white text-slate-800 border-2 border-slate-200 rounded-xl font-bold text-lg hover:border-brand-500 hover:text-brand-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center"
                       >
                         Sell & Get Quote <i className="fa-solid fa-tags ml-2 text-sm"></i>
@@ -619,6 +866,71 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Sample products — Buy now opens auth modal for guests */}
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+                  <div>
+                    <div className="text-sm font-bold text-brand-600">Featured picks</div>
+                    <h2 className="mt-1 text-2xl md:text-3xl font-extrabold text-slate-900">Popular refurbished phones</h2>
+                    <p className="mt-2 text-slate-600 max-w-xl">
+                      Sample offers on the home page. Sign in to see the full catalog, live prices, and checkout.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLandingBuyNow}
+                    className="self-start sm:self-auto px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                  >
+                    View all phones
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {LANDING_SAMPLE_PRODUCTS.map((p) => {
+                    const discount = Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100)
+                    return (
+                      <div
+                        key={p.id}
+                        className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:border-brand-200 transition-all duration-300 group"
+                      >
+                        <div className="relative h-44 overflow-hidden bg-slate-50 flex items-center justify-center p-4">
+                          <span className="absolute top-3 left-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">
+                            -{discount}%
+                          </span>
+                          <span className="absolute top-3 right-3 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded-full">
+                            {p.condition}
+                          </span>
+                          <img
+                            src={productImageSrc(p.img)}
+                            onError={handleProductImageError}
+                            alt={p.name}
+                            className="h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          />
+                        </div>
+                        <div className="p-4">
+                          <div className="text-xs text-slate-500 mb-1 font-medium">
+                            {p.brand} • {p.storage}
+                          </div>
+                          <h3 className="font-bold text-slate-900 mb-2 line-clamp-2 min-h-[2.5rem]">{p.name}</h3>
+                          <div className="flex items-end justify-between mb-4">
+                            <div>
+                              <span className="text-lg font-extrabold text-slate-900">{formatCurrency(p.price)}</span>
+                              <span className="text-xs text-slate-400 line-through block">{formatCurrency(p.oldPrice)}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleLandingBuyNow}
+                            className="w-full py-2.5 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors flex items-center justify-center gap-2"
+                          >
+                            Buy now <i className="fa-solid fa-arrow-right text-sm"></i>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Social proof */}
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-10">
                 <div className="bg-white/70 border border-slate-200 rounded-3xl shadow-sm p-6 md:p-8">
@@ -667,7 +979,7 @@ export default function App() {
                       ))}
                     </div>
                     <div className="mt-6">
-                      <button onClick={() => navigate('sell')} className="w-full sm:w-auto px-6 py-3 bg-brand-500 text-white rounded-xl font-bold hover:bg-brand-600 transition-colors">
+                      <button onClick={() => goSell()} className="w-full sm:w-auto px-6 py-3 bg-brand-500 text-white rounded-xl font-bold hover:bg-brand-600 transition-colors">
                         Start Selling
                       </button>
                     </div>
@@ -693,7 +1005,7 @@ export default function App() {
                       ))}
                     </div>
                     <div className="mt-6">
-                      <button onClick={() => navigate('shop')} className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors">
+                      <button onClick={() => goShop()} className="w-full sm:w-auto px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors">
                         Browse Phones
                       </button>
                     </div>
@@ -747,10 +1059,10 @@ export default function App() {
                       </div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <button onClick={() => navigate('shop')} className="px-6 py-3 rounded-xl font-extrabold bg-white text-slate-900 hover:bg-slate-100 transition-colors">
+                      <button onClick={() => goShop()} className="px-6 py-3 rounded-xl font-extrabold bg-white text-slate-900 hover:bg-slate-100 transition-colors">
                         Shop Now
                       </button>
-                      <button onClick={() => navigate('sell')} className="px-6 py-3 rounded-xl font-extrabold bg-white/10 text-white border border-white/20 hover:bg-white/15 transition-colors">
+                      <button onClick={() => goSell()} className="px-6 py-3 rounded-xl font-extrabold bg-white/10 text-white border border-white/20 hover:bg-white/15 transition-colors">
                         Get Sell Quote
                       </button>
                     </div>
@@ -788,6 +1100,13 @@ export default function App() {
                 </button>
               </div>
 
+              {productsLoading ? (
+                <div className="text-center py-20 text-slate-600 font-medium">Loading phones from the catalog…</div>
+              ) : products.length === 0 ? (
+                <div className="text-center py-20 text-slate-600">
+                  No products loaded. Check that you are logged in and the backend is running.
+                </div>
+              ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {products.map((p) => {
                   const discount = Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100)
@@ -800,7 +1119,12 @@ export default function App() {
                         <span className="absolute top-3 right-3 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded-full">
                           {p.condition}
                         </span>
-                        <img src={p.img} alt={p.name} className="h-full object-contain group-hover:scale-110 transition-transform duration-500" />
+                        <img
+                          src={productImageSrc(p.img)}
+                          onError={handleProductImageError}
+                          alt={p.name}
+                          className="h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                        />
                       </div>
                       <div className="p-5">
                         <div className="text-xs text-slate-500 mb-1">
@@ -821,6 +1145,7 @@ export default function App() {
                   )
                 })}
               </div>
+              )}
             </div>
           </section>
         ) : null}
@@ -849,6 +1174,37 @@ export default function App() {
                 </div>
               </div>
 
+              {sellBrand && sellModel ? (
+                <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
+                      <i className="fa-solid fa-mobile-screen-button text-lg" aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Your device</div>
+                      <div className="truncate text-base font-bold text-slate-900">
+                        {sellBrandLabel} · {sellModel}
+                      </div>
+                    </div>
+                  </div>
+                  {sellPhotoPreviews.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 sm:border-t-0 sm:pt-0 sm:pl-4 sm:border-l">
+                      <span className="text-xs font-semibold text-slate-500">Photos</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sellPhotoPreviews.slice(0, 4).map((p) => (
+                          <img key={p.url} src={p.url} alt="" className="h-11 w-11 rounded-lg border border-slate-200 object-cover" />
+                        ))}
+                        {sellPhotoPreviews.length > 4 ? (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
+                            +{sellPhotoPreviews.length - 4}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 md:p-8 relative overflow-hidden">
                 {sellStep === 1 ? (
                   <div className="animate-fade-in">
@@ -858,8 +1214,11 @@ export default function App() {
                     </h3>
                     <div className="space-y-5">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Brand</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2" htmlFor="sell-brand-select">
+                          Select brand
+                        </label>
                         <select
+                          id="sell-brand-select"
                           value={sellBrand}
                           onChange={(e) => {
                             setSellBrand(e.target.value)
@@ -867,27 +1226,46 @@ export default function App() {
                           }}
                           className="w-full border-slate-300 rounded-lg shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white"
                         >
-                          <option value="">Select Brand</option>
-                          <option value="apple">Apple</option>
-                          <option value="samsung">Samsung</option>
-                          <option value="oneplus">OnePlus</option>
+                          <option value="">Choose a brand…</option>
+                          {sellBrandKeys.map((key) => (
+                            <option key={key} value={key}>
+                              {key.charAt(0).toUpperCase() + key.slice(1)}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Model</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2" htmlFor="sell-model-select">
+                          {sellBrand ? `Select model (${sellBrandLabel})` : 'Select model'}
+                        </label>
                         <select
+                          id="sell-model-select"
                           value={sellModel}
                           onChange={(e) => setSellModel(e.target.value)}
                           disabled={!sellBrand}
-                          className="w-full border-slate-300 rounded-lg shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white disabled:bg-slate-100"
+                          className="w-full border-slate-300 rounded-lg shadow-sm focus:border-brand-500 focus:ring-brand-500 p-3 border bg-white disabled:bg-slate-100 disabled:text-slate-400"
                         >
-                          <option value="">{sellBrand ? 'Select Model' : 'Select Model first'}</option>
+                          <option value="">
+                            {!sellBrand
+                              ? 'Choose a brand first'
+                              : productsLoading && modelsForBrand.length === 0
+                                ? 'Loading models…'
+                                : 'Select model…'}
+                          </option>
                           {modelsForBrand.map((m) => (
                             <option key={m} value={m}>
                               {m}
                             </option>
                           ))}
                         </select>
+                        {sellBrand && modelsForBrand.length === 0 && !productsLoading ? (
+                          <p className="mt-1.5 text-xs text-amber-700">
+                            No models available for this brand in the catalog. Try another brand or refresh after logging in again.
+                          </p>
+                        ) : null}
+                        {sellBrand && modelsForBrand.length > 0 ? (
+                          <p className="mt-1.5 text-xs text-slate-500">Pick the exact model name — your quote matches our buy list for that device.</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-8 flex justify-end">
@@ -930,20 +1308,66 @@ export default function App() {
                     </div>
 
                     <div className="mb-6">
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Upload Photos (Optional)</label>
-                      <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-lg hover:border-brand-500 transition-colors bg-slate-50">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <label className="block text-sm font-medium text-slate-700" htmlFor="sell-photo-input">
+                          Upload Photos (Optional)
+                        </label>
+                        {sellPhotoPreviews.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={clearSellPhotos}
+                            className="text-xs font-semibold text-red-600 hover:text-red-700"
+                          >
+                            Clear all
+                          </button>
+                        ) : null}
+                      </div>
+                      <div
+                        className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-300 border-dashed rounded-lg hover:border-brand-500 transition-colors bg-slate-50"
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                        onDrop={handleSellPhotosDrop}
+                      >
                         <div className="space-y-1 text-center">
-                          <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2"></i>
-                          <div className="flex text-sm text-slate-600 justify-center">
-                            <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-600 hover:text-brand-500 focus-within:outline-none">
-                              <span>Upload a file</span>
-                              <input name="file-upload" type="file" className="sr-only" accept="image/*" multiple />
+                          <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 mb-2" aria-hidden />
+                          <div className="flex flex-wrap text-sm text-slate-600 justify-center gap-x-1">
+                            <label className="relative cursor-pointer bg-white rounded-md font-medium text-brand-600 hover:text-brand-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-brand-200 px-1">
+                              <span>Upload images</span>
+                              <input
+                                id="sell-photo-input"
+                                ref={sellPhotoInputRef}
+                                name="file-upload"
+                                type="file"
+                                className="sr-only"
+                                accept="image/*"
+                                multiple
+                                onChange={handleSellPhotosChange}
+                              />
                             </label>
-                            <p className="pl-1">or drag and drop</p>
+                            <span>or drag and drop here</span>
                           </div>
-                          <p className="text-xs text-slate-500">PNG, JPG up to 10MB</p>
+                          <p className="text-xs text-slate-500">Up to 8 images (PNG, JPG, WebP)</p>
                         </div>
                       </div>
+                      {sellPhotoPreviews.length > 0 ? (
+                        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {sellPhotoPreviews.map((p, idx) => (
+                            <li key={p.url} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm">
+                              <img src={p.url} alt={p.name || `Preview ${idx + 1}`} className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => removeSellPhotoAt(idx)}
+                                className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-slate-900/80 text-white shadow-md transition-opacity hover:bg-slate-900 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                                aria-label={`Remove photo ${idx + 1}`}
+                              >
+                                <i className="fa-solid fa-xmark text-sm" aria-hidden />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
 
                     <div className="flex justify-between mt-8">
@@ -1022,7 +1446,7 @@ export default function App() {
                       <button onClick={() => nextSellStep(2)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors">
                         Back
                       </button>
-                      <button onClick={generateQuote} className="px-6 py-3 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/30">
+                      <button type="button" onClick={() => generateQuote()} className="px-6 py-3 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/30">
                         Get Quote <i className="fa-solid fa-wand-magic-sparkles ml-2"></i>
                       </button>
                     </div>
@@ -1073,7 +1497,7 @@ export default function App() {
                   </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2">Your cart is empty</h3>
                   <p className="text-slate-500 mb-6">Looks like you haven't added any phones yet.</p>
-                  <button onClick={() => navigate('shop')} className="px-8 py-3 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 transition-colors">
+                  <button onClick={() => goShop()} className="px-8 py-3 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 transition-colors">
                     Start Shopping
                   </button>
                 </div>
@@ -1085,7 +1509,12 @@ export default function App() {
                       return (
                         <div key={item.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-center gap-4 animate-fade-in" style={{ animationDelay: `${index * 0.1}s` }}>
                           <div className="w-24 h-24 bg-slate-50 rounded-lg p-2 flex-shrink-0">
-                            <img src={item.img} alt={item.name} className="w-full h-full object-contain" />
+                            <img
+                              src={productImageSrc(item.img)}
+                              onError={handleProductImageError}
+                              alt={item.name}
+                              className="w-full h-full object-contain"
+                            />
                           </div>
                           <div className="flex-grow text-center sm:text-left">
                             <h4 className="font-bold text-slate-900">{item.name}</h4>
@@ -1138,7 +1567,7 @@ export default function App() {
                         <span className="text-2xl font-extrabold text-slate-900">{formatCurrency(total)}</span>
                       </div>
 
-                      <button onClick={() => navigate('checkout')} className="w-full px-6 py-4 bg-brand-500 text-white rounded-xl font-bold text-lg hover:bg-brand-600 transition-all shadow-lg hover:-translate-y-1 flex justify-center items-center">
+                      <button onClick={() => goCheckout()} className="w-full px-6 py-4 bg-brand-500 text-white rounded-xl font-bold text-lg hover:bg-brand-600 transition-all shadow-lg hover:-translate-y-1 flex justify-center items-center">
                         Proceed to Checkout <i className="fa-solid fa-lock ml-2 text-sm"></i>
                       </button>
 
@@ -1165,7 +1594,7 @@ export default function App() {
         {section === 'checkout' ? (
           <section className="py-12 bg-slate-50 min-h-[calc(100vh-4rem)]">
             <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-              <button onClick={() => navigate('cart')} className="text-slate-500 hover:text-brand-500 mb-6 flex items-center text-sm font-medium transition-colors">
+              <button onClick={() => goCart()} className="text-slate-500 hover:text-brand-500 mb-6 flex items-center text-sm font-medium transition-colors">
                 <i className="fa-solid fa-arrow-left mr-2"></i> Back to Cart
               </button>
 
@@ -1508,7 +1937,7 @@ export default function App() {
                       {myOrders.length === 0 ? (
                         <div className="text-slate-600">
                           No orders yet.{' '}
-                          <button onClick={() => navigate('shop')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                          <button onClick={() => goShop()} className="font-extrabold text-brand-600 hover:text-brand-700">
                             Shop phones
                           </button>
                         </div>
@@ -1555,7 +1984,7 @@ export default function App() {
                       {myPickups.length === 0 ? (
                         <div className="text-slate-600">
                           No pickups yet.{' '}
-                          <button onClick={() => navigate('sell')} className="font-extrabold text-brand-600 hover:text-brand-700">
+                          <button onClick={() => goSell()} className="font-extrabold text-brand-600 hover:text-brand-700">
                             Get a quote
                           </button>
                         </div>
@@ -1631,12 +2060,12 @@ export default function App() {
               <h4 className="text-white font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <a href="#" onClick={(e) => (e.preventDefault(), navigate('shop'))} className="hover:text-brand-400 transition-colors">
+                  <a href="#" onClick={(e) => (e.preventDefault(), goShop())} className="hover:text-brand-400 transition-colors">
                     Buy Phones
                   </a>
                 </li>
                 <li>
-                  <a href="#" onClick={(e) => (e.preventDefault(), navigate('sell'))} className="hover:text-brand-400 transition-colors">
+                  <a href="#" onClick={(e) => (e.preventDefault(), goSell())} className="hover:text-brand-400 transition-colors">
                     Sell Phone
                   </a>
                 </li>
@@ -1716,6 +2145,61 @@ export default function App() {
       <div id="toast" className={toast.open ? 'show' : ''}>
         <i className="fa-solid fa-circle-check text-brand-500 mr-2"></i> <span>{toast.message}</span>
       </div>
+
+      {/* Auth prompt — Buy now / View all when not logged in */}
+      {authPromptOpen ? (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[105] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-prompt-title"
+          onClick={() => setAuthPromptOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-5">
+              <i className="fa-solid fa-user-lock text-2xl text-brand-600"></i>
+            </div>
+            <h3 id="auth-prompt-title" className="text-xl font-extrabold text-slate-900 mb-2">
+              Log in or sign up to buy
+            </h3>
+            <p className="text-slate-600 text-sm mb-6">
+              Create a free account to unlock the full store, add to cart, and checkout securely.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthPromptOpen(false)
+                  navigate('login')
+                }}
+                className="w-full px-6 py-3.5 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors"
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthPromptOpen(false)
+                  navigate('signup')
+                }}
+                className="w-full px-6 py-3.5 bg-brand-500 text-white rounded-xl font-bold hover:bg-brand-600 transition-colors"
+              >
+                Sign up
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthPromptOpen(false)}
+                className="text-sm font-semibold text-slate-500 hover:text-slate-800 py-2"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Success modal */}
       {successModal.open ? (
