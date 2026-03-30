@@ -291,7 +291,7 @@ export default function App() {
 
   const schedulePickup = async () => {
     try {
-      await fetch(`${apiBase}/api/sell/pickup`, {
+      await authedFetch(`${apiBase}/api/sell/pickup`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -302,7 +302,6 @@ export default function App() {
           condition: sellCondition,
           storageGb: Number(sellStorage),
           accessories: { box: accBox, charger: accCharger, bill: accBill },
-          userId: auth?.user?.id || null,
         }),
       })
     } catch {
@@ -332,14 +331,13 @@ export default function App() {
       }
       const paymentMethod = formData.get('payment') || 'upi'
 
-      const res = await fetch(`${apiBase}/api/checkout`, {
+      const res = await authedFetch(`${apiBase}/api/checkout`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           cartItems: cart.map((i) => ({ id: i.id, qty: i.qty })),
           shipping,
           paymentMethod,
-          userId: auth?.user?.id || null,
         }),
       })
       if (!res.ok) throw new Error('Checkout failed')
@@ -1666,7 +1664,7 @@ export default function App() {
                     const formData = new FormData(form)
                     const payload = Object.fromEntries(formData.entries())
                     try {
-                      const res = await fetch(`${apiBase}/api/contact`, {
+                      const res = await authedFetch(`${apiBase}/api/contact`, {
                         method: 'POST',
                         headers: { 'content-type': 'application/json' },
                         body: JSON.stringify(payload),
