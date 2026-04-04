@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const CART_KEY = 'web-app-0da18758-cart'
 const AUTH_KEY = 'recell-auth'
@@ -90,6 +90,24 @@ function formatCurrency(amount) {
     currency: 'INR',
     maximumFractionDigits: 0,
   }).format(amount)
+}
+
+/** Title for tracking cards: item names instead of raw order id. */
+function formatBuyOrderTitle(items) {
+  const list = Array.isArray(items) ? items : []
+  if (list.length === 0) return 'Order'
+  return list
+    .map((it) => {
+      const name = it?.name || 'Item'
+      const q = Number(it?.qty) > 1 ? ` × ${it.qty}` : ''
+      return `${name}${q}`
+    })
+    .join(', ')
+}
+
+function formatSellPickupTitle(p) {
+  const fromFields = `${p?.brand || ''} ${p?.model || ''}`.trim()
+  return p?.deviceName || fromFields || 'Device'
 }
 
 function classNames(...xs) {
@@ -307,13 +325,16 @@ export default function App() {
     }
   }, [section, auth?.token])
 
-  const refreshTracking = async () => {
-    if (!auth?.token) return
+  const refreshTracking = useCallback(async () => {
+    const token = auth?.token
+    if (!token) return
     setTrackLoading(true)
     try {
+      const headers = new Headers()
+      headers.set('Authorization', `Bearer ${token}`)
       const [oRes, pRes] = await Promise.all([
-        authedFetch(`${apiBase}/api/track/orders`),
-        authedFetch(`${apiBase}/api/track/pickups`),
+        fetch(`${apiBase}/api/track/orders`, { headers }),
+        fetch(`${apiBase}/api/track/pickups`, { headers }),
       ])
       const o = oRes.ok ? await oRes.json() : { orders: [] }
       const p = pRes.ok ? await pRes.json() : { pickups: [] }
@@ -322,13 +343,20 @@ export default function App() {
     } finally {
       setTrackLoading(false)
     }
-  }
+  }, [apiBase, auth?.token])
+
+  useEffect(() => {
+    if (section !== 'track' || !auth?.token) return
+    void refreshTracking()
+  }, [section, auth?.token, refreshTracking])
 
   const logout = () => {
     setAuth({ token: null, user: null })
     setProducts([])
     setSellCatalog({ byBrand: {} })
     setCart([])
+    setMyOrders([])
+    setMyPickups([])
     setToast({ open: true, message: 'Logged out' })
     navigate('home')
   }
@@ -1948,8 +1976,8 @@ export default function App() {
                           .map((o) => (
                             <div key={o.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                               <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <div className="font-extrabold text-slate-900">{o.id}</div>
+                                <div className="min-w-0">
+                                  <div className="font-extrabold text-slate-900">{formatBuyOrderTitle(o.items)}</div>
                                   <div className="text-sm text-slate-600">
                                     {o.items?.length || 0} items • {formatCurrency(o.totals?.total || 0)}
                                   </div>
@@ -1995,12 +2023,9 @@ export default function App() {
                           .map((p) => (
                             <div key={p.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                               <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <div className="font-extrabold text-slate-900">{p.id}</div>
-                                  <div className="text-sm text-slate-600">
-                                    {p.deviceName || `${p.brand || ''} ${p.model || ''}`.trim() || 'Device'} •{' '}
-                                    {formatCurrency(p.quote || 0)}
-                                  </div>
+                                <div className="min-w-0">
+                                  <div className="font-extrabold text-slate-900">{formatSellPickupTitle(p)}</div>
+                                  <div className="text-sm text-slate-600">{formatCurrency(p.quote || 0)}</div>
                                 </div>
                                 <div className="text-xs font-extrabold px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-700">
                                   {p.status}
